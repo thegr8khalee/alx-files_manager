@@ -13,14 +13,14 @@ export const postNew = async (req, res) => {
     }
 
     if (!password) {
-      res.status(400).json({ error: 'Missing email' });
+      res.status(400).json({ error: 'Missing password' });
       return;
     }
 
     const db = dbClient;
     // const redis = redisClient;
 
-    const checkEmail = db.collection('users').findOne({ email });
+    const checkEmail = await db.collection('users').findOne({ email });
     if (checkEmail) {
       res.status(400).json({ error: 'Already exist' });
       return;
