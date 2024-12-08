@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 
 class DBClient {
   constructor() {
-    const host = process.env.DB_HOST || '127.0.0.1';
+    const host = process.env.DB_HOST || 'localhost';
     const port = process.env.DB_PORT || 27017;
     const database = process.env.DB_DATABASE || 'files_manager';
     const dbURL = `mongodb://${host}:${port}/${database}`;
