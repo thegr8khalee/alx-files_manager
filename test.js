@@ -1,7 +1,32 @@
-const dbClient = require('./utils/db'); // Assuming DBClient is in utils/db.js
+import { MongoClient } from "mongodb";
 
-(async () => {
-  console.log(dbClient.isAlive()); // Check if DB is alive initially
-  console.log(await dbClient.nbUsers()); // Get the number of users
-  console.log(await dbClient.nbFiles()); // Get the number of files
-})();
+// Connection URL
+const url = 'mongodb://127.0.0.1:27017'; // Replace with your MongoDB URL
+const dbName = 'files_manager'; // Replace with your database name
+
+// Create a new MongoClient
+const client = new MongoClient(url);
+
+async function connectToDB() {
+  try {
+    // Connect to the MongoDB server
+    await client.connect();
+    console.log('Connected to MongoDB successfully');
+
+    // Select the database
+    const db = client.db(dbName);
+
+    // Use db.collection to perform operations (e.g., find, insert, etc.)
+    const collection = db.collection('your-collection-name'); // Replace with your collection name
+    const docs = await collection.find({}).toArray();
+    console.log(docs);
+  } catch (error) {
+    console.error('Error connecting to MongoDB:', error);
+  } finally {
+    // Close the connection when done
+    await client.close();
+  }
+}
+
+connectToDB();
+clearImmediate
