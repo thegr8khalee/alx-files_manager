@@ -1,5 +1,5 @@
 const { Buffer } = require('buffer'); // To handle base64 decoding
-const User = require('./models/user'); // Adjust the path to your user model
+const User = require('./user'); // Adjust the path to your user model
 
 class BasicAuth {
   /**

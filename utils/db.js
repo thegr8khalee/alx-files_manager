@@ -1,4 +1,4 @@
-import { MongoClient } from 'mongodb';
+import mongodb from 'mongodb';
 
 class DBClient {
   constructor() {
@@ -7,7 +7,7 @@ class DBClient {
     const database = process.env.DB_DATABASE || 'files_manager';
     const dbURL = `mongodb://${host}:${port}/${database}`;
 
-    this.client = new MongoClient(dbURL);
+    this.client = new mongodb.MongoClient(dbURL, { useUnifiedTopology: true });
     this.connect();
   }
 
