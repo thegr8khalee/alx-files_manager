@@ -3,19 +3,14 @@ import dotenv from 'dotenv';
 
 class DBClient {
   constructor() {
-    const host = process.env.DB_HOST || 'localhost';
+    const host = process.env.DB_HOST || '127.0.0.1';
     const port = process.env.DB_PORT || 27017;
     const database = process.env.DB_DATABASE || 'files_manager';
     const dbURL = `mongodb://${host}:${port}/${database}`;
 
     this.client = new MongoClient(dbURL);
-    this.connected = false;
-    this.init(); // Initialize connection asynchronously
-  }
-
-  async init() {
     try {
-      await this.client.connect();
+      this.client.connect();
       this.connected = true;
       console.log('Database connected!');
     } catch (err) {
@@ -23,6 +18,17 @@ class DBClient {
       this.connected = false;
     }
   }
+
+  // async init() {
+  //   try {
+  //     await this.client.connect();
+  //     this.connected = true;
+  //     console.log('Database connected!');
+  //   } catch (err) {
+  //     console.error('Error connecting to the database:', err);
+  //     this.connected = false;
+  //   }
+  // }
 
   async isAlive() {
     if (!this.connected) return false;
