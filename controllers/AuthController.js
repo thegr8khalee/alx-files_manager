@@ -1,61 +1,73 @@
-// import BasicAuth from './auth/basicAuth';
-// // import dbClient from '../utils/db';
-// import { v4 as uuidv4 } from 'uuid';
-// import redisClient from '../utils/redis';
+import BasicAuth from './auth/basicAuth';
+import dbClient from '../utils/db';
+import { v4 as uuidv4 } from 'uuid';
+import redisClient from '../utils/redis';
+import bcrypt from 'bcrypt';
 
-// export const getConnect = async (req, res) => {
-//   try {
-//     const basicAuth = new BasicAuth();
-//     const { user } = BasicAuth.currentUser(req);
-//     if (!user) {
-//       res.status(401).json({ error: 'Unauthorized' });
-//     }
+export const getConnect = async (req, res) => {
+  try {
+    const { email, password } = BasicAuth.currentUser(req);
+    if (!email || !password) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
-//     const token = uuidv4();
+    const user = await dbClient.client
+      .db()
+      .collection('users')
+      .findOne({ email });
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
-//     await redisClient.set(`auth_${token}`, user._id.toString(), 24 * 60 * 60);
-//     res.status(200).json({ token });
-//   } catch (error) {
-//     res.status(500).json({
-//       message: 'Error connecting user',
-//       error: error.message,
-//     });
-//   }
-// };
+    const token = uuidv4();
 
-// export const getDisconnect = async (req, res) => {
-//   try {
-//     const token = req.headers['x-token'];
+    await redisClient.set(
+      `auth_${token}`,
+      user._id.toString(),
+      24 * 60 * 60
+    );
+    res.status(200).json({ token });
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error connecting user',
+      error: error.message,
+    });
+  }
+};
 
-//     const result = await redisClient.del(`auth_${token}`);
+export const getDisconnect = async (req, res) => {
+  try {
+    const token = req.headers['x-token'];
 
-//     if (result === 0) {
-//       return res.status(401).json({ error: 'Unauthorized' });
-//     }
+    const result = await redisClient.del(`auth_${token}`);
 
-//     return res.status(204).send();
-//   } catch (error) {
-//     res.status(500).json({
-//       message: 'Error disconnecting',
-//       error: error.message,
-//     });
-//   }
-// };
+    if (result === 0) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
-// // export const getMe = async (req, res) => {
-// //   try {
-// //     const token = req.headers['x-token'];
+    return res.status(204).send();
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error disconnecting',
+      error: error.message,
+    });
+  }
+};
 
-// //     const user = await redisClient.get(`auth_${token}`);
+export const getMe = async (req, res) => {
+  try {
+    const token = req.headers['x-token'];
 
-// //     if (!user) {
-// //       res.status(401).json({ error: ' Unauthorized' });
-// //     }
-// //     res.status(201).send(user.id, user.email);
-// //   } catch (error) {
-// //     res.status(500).json({
-// //       message: 'Error getting User',
-// //       error: error.message,
-// //     });
-// //   }
-// // };
+    const user = await redisClient.get(`auth_${token}`);
+
+    if (!user) {
+      res.status(401).json({ error: ' Unauthorized' });
+    }
+    res.status(201).send(user.id, user.email);
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error getting User',
+      error: error.message,
+    });
+  }
+};
