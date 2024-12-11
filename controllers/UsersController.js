@@ -1,5 +1,5 @@
 //import redisClient from '../utils/redis.js'; // Import Redis client
-import dbClient from '../utils/db'; // Import DB client
+import dbClient from '../utils/db.js'; // Import DB client
 import bcrypt from 'bcrypt';
 // import Queue from 'bull/lib/queue';
 
@@ -19,7 +19,7 @@ export const postNew = async (req, res) => {
       return;
     }
 
-    const db = dbClient;
+    const db = dbClient.client.db();
     // const redis = redisClient;
 
     const checkEmail = await db.collection('users').findOne({ email });
