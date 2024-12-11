@@ -1,5 +1,5 @@
 import express from 'express';
-import routes from './routes/index.js';
+import router from './routes/index.js'
 
 const app = express();
 
@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 
 // Load routes
-app.use(routes);
+app.use(router);
 
 // Set the port from the environment variable or default to 5000
 const PORT = process.env.PORT || 5000;
