@@ -3,7 +3,8 @@ import dbClient from '../utils/db';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
-import redisClient from '../utils/redis.js';
+import { getAuth } from './getAuth.js';
+import CircularJSON from 'circular-json';
 import { ObjectId } from 'mongodb';
 
 const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
@@ -20,7 +21,7 @@ export const postUpload = async (req, res) => {
 
     // Retrieve user based on token
 
-    const auth = await getMe(token);
+    const auth = await getAuth(token);
     console.log('Auth: ', auth);
 
     if (!auth) {
@@ -64,8 +65,8 @@ export const postUpload = async (req, res) => {
       }
     }
 
-    const userId = auth.id;
-    console.log(userId)
+    const userId = new ObjectId(auth.id).toString();
+    console.log(userId);
 
     // Handle folder type (no file data required)
     if (type === 'folder') {
@@ -73,7 +74,7 @@ export const postUpload = async (req, res) => {
         .db()
         .collection('files')
         .insertOne({
-          userId,
+          userId: userId,
           name,
           type,
           parentId: parentId || 0, // Default to 0 for root
@@ -90,7 +91,7 @@ export const postUpload = async (req, res) => {
       console.log('Folder uploaded successfully');
       return res.status(201).json({
         id: post.insertedId,
-        userId,
+        userId: userId,
         name,
         type,
         isPublic,
@@ -148,57 +149,56 @@ export const postUpload = async (req, res) => {
   }
 };
 
-const getMe = async (token) => {
-  try {
-    if (!token) {
-      return { error: 'Token is required' };
-    }
+// const getAuth = async (token) => {
+//   try {
+//     if (!token) {
+//       return { error: 'Token is required' };
+//     }
 
-    console.log('Received Token:', token);
+//     console.log('Received Token:', token);
 
-    const userId = await redisClient.get(`auth_${token}`);
-    console.log('User ID from Redis:', userId);
+//     const userId = await redisClient.get(`auth_${token}`);
+//     console.log('User ID from Redis:', userId);
 
-    if (!userId) {
-      return { error: 'Unauthorized - Invalid or expired token' };
-    }
+//     if (!userId) {
+//       return { error: 'Unauthorized - Invalid or expired token' };
+//     }
 
-    // Convert userId to ObjectId to match MongoDB _id type
-    const userObjectId = new ObjectId(userId);
-    console.log('Converted User ID:', userObjectId);
+//     // Convert userId to ObjectId to match MongoDB _id type
+//     const userObjectId = new ObjectId(userId);
+//     console.log('Converted User ID:', userObjectId);
 
-    const user = await dbClient.client
-      .db()
-      .collection('users')
-      .findOne({ _id: userObjectId });
-    console.log('User from DB:', user);
+//     const user = await dbClient.client
+//       .db()
+//       .collection('users')
+//       .findOne({ _id: userObjectId });
+//     console.log('User from DB:', user);
 
-    if (!user) {
-      return { error: 'Unauthorized - User not found' };
-    }
+//     if (!user) {
+//       return { error: 'Unauthorized - User not found' };
+//     }
 
-    return {
-      id: user._id,
-      email: user.email,
-    };
-  } catch (error) {
-    console.error('Error:', error);
-    return {
-      message: 'Error retrieving user',
-      error: error.message,
-    };
-  }
-};
+//     return {
+//       id: user._id,
+//       email: user.email,
+//     };
+//   } catch (error) {
+//     console.error('Error:', error);
+//     return {
+//       message: 'Error retrieving user',
+//       error: error.message,
+//     };
+//   }
+// };
 
-
-export const getShow = async(req, res) => {
+export const getShow = async (req, res) => {
   try {
     const token = req.headers['x-token'];
     console.log('token: ', token);
 
     // Retrieve user based on token
 
-    const auth = await getMe(token);
+    const auth = await getAuth(token);
     console.log('Auth: ', auth);
 
     if (!auth) {
@@ -207,12 +207,18 @@ export const getShow = async(req, res) => {
     }
 
     const fileId = req.params.id;
-    const document = await dbClient.client.db().collection('files').find({id: fileId, userId: auth.id})
-    if (!document) {
-      res.status(400).json({message: "Not found"})
+    const file = await dbClient.client
+      .db()
+      .collection('files')
+      .findOne({ id: fileId, userId: auth.id });
+
+    console.log(file);
+
+    if (!file) {
+      return res.status(404).json({ message: 'Not found' });
     }
 
-    return res.status(200).json(document);
+    return res.status(200).json(file);
   } catch (error) {
     console.error('Error:', error);
     return {
@@ -220,7 +226,7 @@ export const getShow = async(req, res) => {
       error: error.message,
     };
   }
-}
+};
 
 export const getIndex = async (req, res) => {
   try {
@@ -228,7 +234,7 @@ export const getIndex = async (req, res) => {
     console.log('token: ', token);
 
     // Retrieve user based on token
-    const auth = await getMe(token);
+    const auth = await getAuth(token);
     console.log('Auth: ', auth);
 
     if (!auth) {
@@ -269,6 +275,112 @@ export const getIndex = async (req, res) => {
     console.error('Error:', error);
     return res.status(500).json({
       message: 'Error retrieving files',
+      error: error.message,
+    });
+  }
+};
+
+export const putPublish = async (req, res) => {
+  try {
+    const token = req.headers['x-token'];
+
+    // Retrieve user based on token
+    const auth = await getAuth(token);
+    if (!auth) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const fileId = req.params.id;
+
+    let objectId;
+    try {
+      objectId = new ObjectId(fileId);
+    } catch (err) {
+      return res.status(400).json({ message: 'Invalid file ID' });
+    }
+
+    console.log(fileId);
+    // Fetch the document by ID
+    const document = await dbClient.client
+      .db()
+      .collection('files')
+      .findOne({ _id: objectId });
+    console.log(document);
+
+    if (!document) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    // Update the document to set `isPublic` to true
+    await dbClient.client
+      .db()
+      .collection('files')
+      .updateOne({ _id: objectId }, { $set: { isPublic: true } });
+
+    const document1 = await dbClient.client
+      .db()
+      .collection('files')
+      .findOne({ _id: objectId });
+    console.log(document1);
+
+    return res.status(200).json(document1);
+  } catch (error) {
+    console.error('Error:', error);
+    return res.status(500).json({
+      message: 'Error publishing file',
+      error: error.message,
+    });
+  }
+};
+
+export const putUnpublish = async (req, res) => {
+  try {
+    const token = req.headers['x-token'];
+
+    // Retrieve user based on token
+    const auth = await getAuth(token);
+    if (!auth) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const fileId = req.params.id;
+
+    let objectId;
+    try {
+      objectId = new ObjectId(fileId);
+    } catch (err) {
+      return res.status(400).json({ message: 'Invalid file ID' });
+    }
+
+    console.log(fileId);
+    // Fetch the document by ID
+    const document = await dbClient.client
+      .db()
+      .collection('files')
+      .findOne({ _id: objectId });
+    console.log(document);
+
+    if (!document) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    // Update the document to set `isPublic` to true
+    await dbClient.client
+      .db()
+      .collection('files')
+      .updateOne({ _id: objectId }, { $set: { isPublic: false } });
+
+      const document1 = await dbClient.client
+      .db()
+      .collection('files')
+      .findOne({ _id: objectId });
+    console.log(document1);
+
+    return res.status(200).json(document1);
+  } catch (error) {
+    console.error('Error:', error);
+    return res.status(500).json({
+      message: 'Error Unpublishing file',
       error: error.message,
     });
   }

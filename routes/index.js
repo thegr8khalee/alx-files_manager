@@ -4,9 +4,13 @@ import { postNew } from '../controllers/UsersController.js';
 import { getConnect } from '../controllers/AuthController.js';
 import { getDisconnect } from '../controllers/AuthController.js';
 import { getMe } from '../controllers/UsersController.js';
-import { postUpload, getShow, getIndex } from '../controllers/FilesController.js';
-
-
+import {
+  postUpload,
+  getShow,
+  getIndex,
+  putPublish,
+  putUnpublish,
+} from '../controllers/FilesController.js';
 
 const loadRoutes = (api) => {
   api.get('/status', getStatus);
@@ -18,6 +22,8 @@ const loadRoutes = (api) => {
   api.post('/files', postUpload);
   api.get('/files/:id', getShow);
   api.get('/files', getIndex);
+  api.put('/files/:id/publish', putPublish);
+  api.put('/files/:id/unpublish', putUnpublish);
 };
 
 export default loadRoutes;

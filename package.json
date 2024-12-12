@@ -17,6 +17,7 @@
         "bcrypt": "^5.1.1",
         "bull": "^4.16.4",
         "chai-http": "^5.1.1",
+        "circular-json": "^0.5.9",
         "dotenv": "^16.4.7",
         "express": "^4.21.2",
         "image-thumbnail": "^1.0.17",
