@@ -10,6 +10,7 @@ import {
   getIndex,
   putPublish,
   putUnpublish,
+  getFile
 } from '../controllers/FilesController.js';
 
 const loadRoutes = (api) => {
@@ -24,6 +25,7 @@ const loadRoutes = (api) => {
   api.get('/files', getIndex);
   api.put('/files/:id/publish', putPublish);
   api.put('/files/:id/unpublish', putUnpublish);
+  api.get('/files/:id/data', getFile);
 };
 
 export default loadRoutes;

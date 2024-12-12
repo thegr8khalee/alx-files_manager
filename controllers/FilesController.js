@@ -4,8 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import { getAuth } from './getAuth.js';
-import CircularJSON from 'circular-json';
 import { ObjectId } from 'mongodb';
+import mime from 'mime-types'
 
 const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
 
@@ -385,3 +385,58 @@ export const putUnpublish = async (req, res) => {
     });
   }
 };
+
+
+export const getFile = async(req, res) => {
+  try {
+    const token = req.headers['x-token'];
+    console.log('token: ', token);
+
+    // Retrieve user based on token
+    const auth = await getAuth(token);
+    console.log('Auth: ', auth);
+
+    if (!auth) {
+      console.log('Unauthorized: No user found for token');
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const userId = new ObjectId(auth.id);
+    console.log(userId);
+    const docId = new ObjectId(req.params.id)
+    console.log("DocId: ", docId)
+
+    const document = await dbClient.client.db().collection('files').findOne({ _id: docId })
+    if(!document) {
+      res.status(400).json({message: "Not found 1"})
+    }
+
+    if(!document.isPublic && !auth || userId != document.userId) {
+      res.status(400).json({message: "Not found 2"})
+    }
+
+    if(document.type == "folder") {
+      res.status(400).json({message: "A folder doesn't have content"})
+    }
+
+    const filePath = document.localPath
+    if(!fs.existsSync(filePath)){
+      res.status(400).json({message: "Not found 3"})
+    }
+
+    const mimeType = mime.lookup(document.name)
+    res.setHeader('Content-Type', mimeType);
+    const readStream = fs.createReadStream(filePath);
+    readStream.on('error', (streamErr) => {
+      return res.status(500).json({ message: 'Error reading file', error: streamErr.message });
+    });
+    res.status(200);
+    readStream.pipe(res);
+  } catch (error) {
+    console.error('Error:', error);
+    return res.status(500).json({
+      message: 'Error getting file data',
+      error: error.message,
+    });
+  }
+}
