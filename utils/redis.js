@@ -20,8 +20,8 @@ class RedisClient {
   async isAlive() {
     try {
       // Check if the Redis client can ping the server
-      await this.client.ping();
-      return true;
+      return this.client.isOpen;
+      //return true;
     } catch (error) {
       console.error('Redis client is not alive:', error.message || error);
       return false;
