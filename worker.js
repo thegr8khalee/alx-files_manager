@@ -38,3 +38,29 @@ fileQueue.process(async (job) => {
     throw error;
   }
 });
+
+
+// Create Bull queue for users
+const userQueue = new Bull('userQueue');
+
+// Process the userQueue
+userQueue.process(async (job) => {
+  const { userId } = job.data;
+
+  if (!userId) {
+    throw new Error('Missing userId');
+  }
+
+  // Retrieve the user from the database
+  const user = await dbClient.client
+    .db()
+    .collection('users')
+    .findOne({ _id: new ObjectId(userId) });
+
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  // Simulate sending a welcome email
+  console.log(`Welcome ${user.email}!`);
+});

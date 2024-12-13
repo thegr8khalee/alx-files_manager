@@ -8,8 +8,8 @@ import { ObjectId } from 'mongodb';
 import mime from 'mime-types';
 import Queue from 'bull';
 
-
 const fileQueue = new Queue('fileQueue');
+const userQueue = new Bull('userQueue');
 
 const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
 
@@ -134,9 +134,10 @@ export const postUpload = async (req, res) => {
       return res.status(400).json({ message: 'Error uploading file to DB' });
     }
 
-    if(type === 'image') {
-      fileQueue.add({ userId, fileId});
+    if (type === 'image') {
+      await fileQueue.add({ userId, fileId });
     }
+    await userQueue.add({ userId });
 
     console.log('File uploaded successfully');
     return res.status(201).json({
@@ -388,16 +389,16 @@ export const getFile = async (req, res) => {
     }
 
     let filePath = document.localPath;
-    const size = req.params.size
+    const size = req.params.size;
     if (size) {
-      if (!['500', '250', '100'].includes(size)) return res.status(400).json({ message: 'Invalid size' });
+      if (!['500', '250', '100'].includes(size))
+        return res.status(400).json({ message: 'Invalid size' });
       filePath = `${file.localPath}_${size}`;
     }
     if (!fs.existsSync(filePath)) {
       res.status(400).json({ message: 'Not found 3' });
     }
 
-  
     const mimeType = mime.lookup(document.name);
     res.setHeader('Content-Type', mimeType);
     const readStream = fs.createReadStream(filePath);
