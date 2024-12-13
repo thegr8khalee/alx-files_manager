@@ -5,7 +5,11 @@ import fs from 'fs';
 import path from 'path';
 import { getAuth } from './getAuth.js';
 import { ObjectId } from 'mongodb';
-import mime from 'mime-types'
+import mime from 'mime-types';
+import Queue from 'bull';
+
+
+const fileQueue = new Queue('fileQueue');
 
 const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
 
@@ -130,6 +134,10 @@ export const postUpload = async (req, res) => {
       return res.status(400).json({ message: 'Error uploading file to DB' });
     }
 
+    if(type === 'image') {
+      fileQueue.add({ userId, fileId});
+    }
+
     console.log('File uploaded successfully');
     return res.status(201).json({
       id: post.insertedId,
@@ -148,48 +156,6 @@ export const postUpload = async (req, res) => {
     });
   }
 };
-
-// const getAuth = async (token) => {
-//   try {
-//     if (!token) {
-//       return { error: 'Token is required' };
-//     }
-
-//     console.log('Received Token:', token);
-
-//     const userId = await redisClient.get(`auth_${token}`);
-//     console.log('User ID from Redis:', userId);
-
-//     if (!userId) {
-//       return { error: 'Unauthorized - Invalid or expired token' };
-//     }
-
-//     // Convert userId to ObjectId to match MongoDB _id type
-//     const userObjectId = new ObjectId(userId);
-//     console.log('Converted User ID:', userObjectId);
-
-//     const user = await dbClient.client
-//       .db()
-//       .collection('users')
-//       .findOne({ _id: userObjectId });
-//     console.log('User from DB:', user);
-
-//     if (!user) {
-//       return { error: 'Unauthorized - User not found' };
-//     }
-
-//     return {
-//       id: user._id,
-//       email: user.email,
-//     };
-//   } catch (error) {
-//     console.error('Error:', error);
-//     return {
-//       message: 'Error retrieving user',
-//       error: error.message,
-//     };
-//   }
-// };
 
 export const getShow = async (req, res) => {
   try {
@@ -370,7 +336,7 @@ export const putUnpublish = async (req, res) => {
       .collection('files')
       .updateOne({ _id: objectId }, { $set: { isPublic: false } });
 
-      const document1 = await dbClient.client
+    const document1 = await dbClient.client
       .db()
       .collection('files')
       .findOne({ _id: objectId });
@@ -386,8 +352,7 @@ export const putUnpublish = async (req, res) => {
   }
 };
 
-
-export const getFile = async(req, res) => {
+export const getFile = async (req, res) => {
   try {
     const token = req.headers['x-token'];
     console.log('token: ', token);
@@ -403,32 +368,43 @@ export const getFile = async(req, res) => {
 
     const userId = new ObjectId(auth.id);
     console.log(userId);
-    const docId = new ObjectId(req.params.id)
-    console.log("DocId: ", docId)
+    const docId = new ObjectId(req.params.id);
+    console.log('DocId: ', docId);
 
-    const document = await dbClient.client.db().collection('files').findOne({ _id: docId })
-    if(!document) {
-      res.status(400).json({message: "Not found 1"})
+    const document = await dbClient.client
+      .db()
+      .collection('files')
+      .findOne({ _id: docId });
+    if (!document) {
+      res.status(400).json({ message: 'Not found 1' });
     }
 
-    if(!document.isPublic && !auth || userId != document.userId) {
-      res.status(400).json({message: "Not found 2"})
+    if ((!document.isPublic && !auth) || userId != document.userId) {
+      res.status(400).json({ message: 'Not found 2' });
     }
 
-    if(document.type == "folder") {
-      res.status(400).json({message: "A folder doesn't have content"})
+    if (document.type == 'folder') {
+      res.status(400).json({ message: "A folder doesn't have content" });
     }
 
-    const filePath = document.localPath
-    if(!fs.existsSync(filePath)){
-      res.status(400).json({message: "Not found 3"})
+    let filePath = document.localPath;
+    const size = req.params.size
+    if (size) {
+      if (!['500', '250', '100'].includes(size)) return res.status(400).json({ message: 'Invalid size' });
+      filePath = `${file.localPath}_${size}`;
+    }
+    if (!fs.existsSync(filePath)) {
+      res.status(400).json({ message: 'Not found 3' });
     }
 
-    const mimeType = mime.lookup(document.name)
+  
+    const mimeType = mime.lookup(document.name);
     res.setHeader('Content-Type', mimeType);
     const readStream = fs.createReadStream(filePath);
     readStream.on('error', (streamErr) => {
-      return res.status(500).json({ message: 'Error reading file', error: streamErr.message });
+      return res
+        .status(500)
+        .json({ message: 'Error reading file', error: streamErr.message });
     });
     res.status(200);
     readStream.pipe(res);
@@ -439,4 +415,139 @@ export const getFile = async(req, res) => {
       error: error.message,
     });
   }
-}
+};
+
+// export const postUpload = async (req, res) => {
+//   try {
+//     const token = req.headers['x-token'];
+//     console.log('token: ', token);
+
+//     // Retrieve user based on token
+
+//     const auth = await getAuth(token);
+//     console.log('Auth: ', auth);
+
+//     if (!auth) {
+//       console.log('Unauthorized: No user found for token');
+//       return res.status(401).json({ message: 'Unauthorized' });
+//     }
+
+//     const { name, type, data, parentId = 0, isPublic = false } = req.body;
+//     console.log('gotten req body');
+//     // Validate required fields
+//     if (!name) {
+//       console.log('Missing name in request body');
+//       return res.status(400).json({ message: 'Missing name' });
+//     }
+
+//     if (!type || !['folder', 'file', 'image'].includes(type)) {
+//       console.log('Missing or invalid type');
+//       return res.status(400).json({ message: 'Missing or invalid type' });
+//     }
+
+//     if (type !== 'folder' && !data) {
+//       console.log('Missing data for file/image type');
+//       return res.status(400).json({ message: 'Missing data' });
+//     }
+
+//     // Validate parentId if provided
+//     if (parentId) {
+//       const parentFile = await dbClient.client
+//         .db()
+//         .collection('files')
+//         .findOne({ id: parentId });
+
+//       if (!parentFile) {
+//         console.log(`Parent file not found for parentId: ${parentId}`);
+//         return res.status(400).json({ message: 'Parent not found' });
+//       }
+
+//       if (parentFile.type !== 'folder') {
+//         console.log('Parent is not a folder');
+//         return res.status(400).json({ message: 'Parent is not a folder' });
+//       }
+//     }
+
+//     const userId = new ObjectId(auth.id).toString();
+//     console.log(userId);
+
+//     // Handle folder type (no file data required)
+//     if (type === 'folder') {
+//       const post = await dbClient.client
+//         .db()
+//         .collection('files')
+//         .insertOne({
+//           userId: userId,
+//           name,
+//           type,
+//           parentId: parentId || 0, // Default to 0 for root
+//           isPublic,
+//         });
+
+//       if (!post) {
+//         console.log('Error uploading folder to DB');
+//         return res
+//           .status(400)
+//           .json({ message: 'Error uploading folder to DB' });
+//       }
+
+//       console.log('Folder uploaded successfully');
+//       return res.status(201).json({
+//         id: post.insertedId,
+//         userId: userId,
+//         name,
+//         type,
+//         isPublic,
+//         parentId: parentId || 0,
+//       });
+//     }
+
+//     // Ensure directory exists for file/image types
+//     if (!fs.existsSync(folderPath)) {
+//       fs.mkdirSync(folderPath, { recursive: true });
+//     }
+
+//     const fileId = uuidv4();
+//     const filePath = path.join(folderPath, `${fileId}`);
+
+//     // Decode base64 data and save to file system
+//     const fileBuffer = Buffer.from(data, 'base64');
+//     fs.writeFileSync(filePath, fileBuffer);
+
+//     // Insert file metadata into DB
+//     const post = await dbClient.client
+//       .db()
+//       .collection('files')
+//       .insertOne({
+//         userId,
+//         name,
+//         type,
+//         parentId: parentId || 0, // Default to 0 if no parentId provided
+//         isPublic,
+//         localPath: filePath,
+//       });
+
+//     if (!post) {
+//       fs.unlinkSync(filePath); // Remove the file if DB insert fails
+//       console.log('Error uploading file to DB');
+//       return res.status(400).json({ message: 'Error uploading file to DB' });
+//     }
+
+//     console.log('File uploaded successfully');
+//     return res.status(201).json({
+//       id: post.insertedId,
+//       userId,
+//       name,
+//       type,
+//       isPublic,
+//       parentId,
+//       localPath: filePath,
+//     });
+//   } catch (error) {
+//     console.error('Error in postUpload:', error);
+//     return res.status(500).json({
+//       message: 'Error uploading file',
+//       error: error.message,
+//     });
+//   }
+// };
